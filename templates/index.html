@@ -35,8 +35,6 @@
         /* 棋盘 */
         #board {
             display: grid;
-            grid-template-columns: repeat(15, 40px);
-            grid-template-rows: repeat(15, 40px);
             gap: 0;
             background-color: #DEB887;
             border: 1px solid #8B4513;
@@ -48,23 +46,12 @@
             width: 40px;
             height: 40px;
             box-sizing: border-box;
-            border-right: 1px solid #8B4513;
-            border-bottom: 1px solid #8B4513;
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
             cursor: pointer;
             background-color: transparent;
-        }
-
-        /* 移除最后一行和最后一列的多余边框 */
-        .cell:nth-child(15n) {
-            border-right: none;
-        }
-
-        .cell:nth-last-child(-n + 15) {
-            border-bottom: none;
         }
 
         /* 棋子样式 */
@@ -134,14 +121,15 @@
     <script>
         const boardElement = document.getElementById('board');
         const statusElement = document.getElementById('status');
-        const boardSize = 15;
-        console.log(`Debug: boardSize = ${boardSize}`);  // 调试输出
+        const boardSize = 9;
         let board = Array.from({ length: boardSize }, () => Array(boardSize).fill(''));
         let gameStarted = false;
         let gameOver = false;
         let aiTurn = false;
 
         function createBoard() {
+            boardElement.style.gridTemplateColumns = `repeat(${boardSize}, 40px)`;
+            boardElement.style.gridTemplateRows = `repeat(${boardSize}, 40px)`;
             boardElement.innerHTML = '';
             for (let x = 0; x < boardSize; x++) {
                 for (let y = 0; y < boardSize; y++) {
@@ -149,11 +137,19 @@
                     cell.classList.add('cell');
                     cell.dataset.x = x;
                     cell.dataset.y = y;
+                    cell.style.borderTop = '1px solid #8B4513';
+                    cell.style.borderLeft = '1px solid #8B4513';
+                    if (y === boardSize - 1) {
+                        cell.style.borderRight = '1px solid #8B4513';
+                    }
+                    if (x === boardSize - 1) {
+                        cell.style.borderBottom = '1px solid #8B4513';
+                    }
                     cell.addEventListener('click', handleCellClick);
                     boardElement.appendChild(cell);
                 }
             }
-            console.log(`Debug: Created board with ${boardSize}x${boardSize} cells`);  // 调试输出
+            console.log(`Debug: Created board with ${boardSize}x${boardSize} cells`);
         }
 
         function handleCellClick(event) {
