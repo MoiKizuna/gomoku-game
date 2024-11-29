@@ -71,7 +71,7 @@ class GomokuGame:
             x, y = move
             self.board[x, y] = -1
             score, nodes = self.alpha_beta(
-                0, float('-inf'), float('inf'), False, max_depth)
+                1, float('-inf'), float('inf'), False, max_depth)
             nodes_evaluated += nodes
             self.board[x, y] = 0
             if score > best_score:
@@ -81,15 +81,20 @@ class GomokuGame:
 
     def alpha_beta(self, depth, alpha, beta, maximizing_player, max_depth):
         board_hash = self.hash_board()
-        if board_hash in self.cache:
-            return self.cache[board_hash], 0
+        cache_key = f"{board_hash}|depth:{depth}|player:{maximizing_player}"
+        if cache_key in self.cache:
+            logging.debug(
+                f"缓存命中: key={cache_key}, score={self.cache[cache_key]}")
+            return self.cache[cache_key], 0
 
         if self.check_win_condition() or depth == max_depth:
             score = self.evaluate_board()
-            self.cache[board_hash] = score
+            self.cache[cache_key] = score
+            logging.debug(f"评估棋局: depth={depth}, score={score}")
             return score, 1
 
         moves = self.generate_moves()
+        logging.debug(f"生成移动: depth={depth}, moves={moves}")
         nodes_evaluated = 0
 
         # 启发式排序：优先考虑评分更高的移动
@@ -107,11 +112,13 @@ class GomokuGame:
                 self.board[x, y] = 0
                 max_eval = max(max_eval, eval)
                 alpha = max(alpha, eval)
+                logging.debug(
+                    f"Maximizing Player: depth={depth}, move={move}, eval={eval}, alpha={alpha}, beta={beta}")
                 if beta <= alpha:
                     logging.debug(
-                        f"剪枝发生在深度 {depth}，alpha: {alpha}, beta: {beta}")
+                        f"剪枝发生在 maximizing_player, depth {depth}, alpha: {alpha}, beta: {beta}")
                     break
-            self.cache[board_hash] = max_eval
+            self.cache[cache_key] = max_eval
             return max_eval, nodes_evaluated
         else:
             min_eval = float('inf')
@@ -124,11 +131,13 @@ class GomokuGame:
                 self.board[x, y] = 0
                 min_eval = min(min_eval, eval)
                 beta = min(beta, eval)
+                logging.debug(
+                    f"Minimizing Player: depth={depth}, move={move}, eval={eval}, alpha={alpha}, beta={beta}")
                 if beta <= alpha:
                     logging.debug(
-                        f"剪枝发生在深度 {depth}，alpha: {alpha}, beta: {beta}")
+                        f"剪枝发生在 minimizing_player, depth {depth}, alpha: {alpha}, beta: {beta}")
                     break
-            self.cache[board_hash] = min_eval
+            self.cache[cache_key] = min_eval
             return min_eval, nodes_evaluated
 
     def heuristic_move_score(self, move):
