@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋游戏</title>
+    <style>
+        #board {
+            display: grid;
+            grid-template-columns: repeat(15, 40px);
+            grid-template-rows: repeat(15, 40px);
+            gap: 1px;
+            margin: 20px auto;
+            width: fit-content;
+        }
+
+        .cell {
+            width: 40px;
+            height: 40px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>欢迎来到五子棋游戏</h1>
+    <div id="board"></div>
+    <p id="status">游戏正在进行中...</p>
+
+    <button onclick="startGame('player')">玩家先手</button>
+    <button onclick="startGame('ai')">AI先手</button>
+
+    <script>
+        const boardElement = document.getElementById('board');
+        const statusElement = document.getElementById('status');
+        const boardSize = 15;
+        let board = Array.from({ length: boardSize }, () => Array(boardSize).fill(''));
+        let gameStarted = false;
+        let gameOver = false;
+        let aiTurn = false;
+
+        function createBoard() {
+            boardElement.innerHTML = '';
+            for (let x = 0; x < boardSize; x++) {
+                for (let y = 0; y < boardSize; y++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    cell.addEventListener('click', handleCellClick);
+                    boardElement.appendChild(cell);
+                }
+            }
+        }
+
+        function handleCellClick(event) {
+            if (!gameStarted || gameOver || aiTurn) return;
+
+            const x = event.target.dataset.x;
+            const y = event.target.dataset.y;
+            if (board[x][y] !== '') return;
+
+            board[x][y] = 'X';
+            event.target.textContent = 'X';
+
+            aiTurn = true;
+            fetch('/move', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ x: parseInt(x), y: parseInt(y) })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'win') {
+                        statusElement.textContent = `游戏结束，${data.winner}获胜！`;
+                        gameOver = true;
+                    } else {
+                        const aiMove = data.ai_move;
+                        board[aiMove.x][aiMove.y] = 'O';
+                        const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
+                        aiCell.textContent = 'O';
+                    }
+                    aiTurn = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    aiTurn = false;
+                });
+        }
+
+        function startGame(firstPlayer) {
+            gameStarted = true;
+            gameOver = false;
+            board = Array.from({ length: boardSize }, () => Array(boardSize).fill(''));
+            createBoard();
+            statusElement.textContent = '游戏正在进行中...';
+
+            if (firstPlayer === 'ai') {
+                // AI先手
+                fetch('/move', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ x: -1, y: -1 }) // 特殊标���，表示AI先手
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        const aiMove = data.ai_move;
+                        board[aiMove.x][aiMove.y] = 'O';
+                        const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
+                        aiCell.textContent = 'O';
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+        }
+
+        createBoard();
+    </script>
+</body>
+
+</html>
