@@ -2,25 +2,45 @@ import numpy as np
 import asyncio
 import time
 import hashlib
+import yaml
+import logging
 
 
 class GomokuGame:
     def __init__(self):
-        self.board = np.zeros((15, 15), dtype=int)
+        with open('config.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+
+        self.board_size = config['game']['board_size']
+        self.win_condition = config['game']['win_condition']
+        self.think_time = config['ai']['think_time']
+        self.max_depth = config['ai']['max_depth']
+
+        self.board = np.zeros((self.board_size, self.board_size), dtype=int)
         self.current_player = 1  # 1 for player, -1 for AI
         self.cache = {}  # 用于存储评估结果的缓存
 
+        logging.basicConfig(level=logging.DEBUG)
+
     def player_move(self, x, y):
+        logging.debug(f"玩家移动: x={x}, y={y}")
+        if not (0 <= x < self.board_size and 0 <= y < self.board_size):
+            logging.error(f"无效的移动坐标: x={x}, y={y}")
+            raise ValueError("无效的移动坐标")
+
         if self.board[x, y] == 0:
             self.board[x, y] = 1
-            return self.check_win(x, y)
+            win = self.check_win(x, y)
+            logging.debug(f"移动后检查胜利: {win}")
+            return win
+        logging.warning(f"尝试在已占用位置移动: x={x}, y={y}")
         return False
 
     async def ai_move(self):
         best_score = float('-inf')
         best_move = None
         start_time = time.time()
-        time_limit = 1
+        time_limit = self.think_time
 
         depth = 0
         while time.time() - start_time < time_limit:
@@ -29,6 +49,8 @@ class GomokuGame:
                 best_score = score
                 best_move = move
             depth += 1
+            if depth >= self.max_depth:
+                break
 
         if best_move:
             print(f"AI chooses move at {best_move} with score {best_score}")
@@ -96,7 +118,8 @@ class GomokuGame:
     def heuristic_move_score(self, move):
         x, y = move
         # 简单的启发式评分：离中心越近评分越高
-        return -(abs(x - 7) + abs(y - 7))
+        center = self.board_size // 2
+        return -(abs(x - center) + abs(y - center))
 
     def generate_moves(self, max_moves=15):
         high_priority_moves = set()
@@ -104,24 +127,24 @@ class GomokuGame:
         low_priority_moves = set()
 
         # 高优先级：位于现有棋子周围的空位
-        for x in range(15):
-            for y in range(15):
+        for x in range(self.board_size):
+            for y in range(self.board_size):
                 if self.board[x, y] != 0:
                     for dx in range(-1, 2):
                         for dy in range(-1, 2):
                             nx, ny = x + dx, y + dy
-                            if 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx, ny] == 0:
+                            if 0 <= nx < self.board_size and 0 <= ny < self.board_size and self.board[nx, ny] == 0:
                                 high_priority_moves.add((nx, ny))
 
         # 中优先级：重要位置
-        for x in range(15):
-            for y in range(15):
+        for x in range(self.board_size):
+            for y in range(self.board_size):
                 if self.board[x, y] == 0 and self.is_important_position(x, y):
                     medium_priority_moves.add((x, y))
 
         # 低优先级：其他空位
-        for x in range(15):
-            for y in range(15):
+        for x in range(self.board_size):
+            for y in range(self.board_size):
                 if self.board[x, y] == 0 and (x, y) not in high_priority_moves and (x, y) not in medium_priority_moves:
                     low_priority_moves.add((x, y))
 
@@ -147,7 +170,7 @@ class GomokuGame:
         for dx in range(-1, 2):
             for dy in range(-1, 2):
                 nx, ny = x + dx, y + dy
-                if 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx, ny] != 0:
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size and self.board[nx, ny] != 0:
                     return True
         return False
 
@@ -157,28 +180,28 @@ class GomokuGame:
 
         for dx, dy in directions:
             count = 1
-            for step in range(1, 5):
+            for step in range(1, self.win_condition):
                 nx, ny = x + step * dx, y + step * dy
-                if 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx, ny] == player:
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size and self.board[nx, ny] == player:
                     count += 1
                 else:
                     break
 
-            for step in range(1, 5):
+            for step in range(1, self.win_condition):
                 nx, ny = x - step * dx, y - step * dy
-                if 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx, ny] == player:
+                if 0 <= nx < self.board_size and 0 <= ny < self.board_size and self.board[nx, ny] == player:
                     count += 1
                 else:
                     break
 
-            if count >= 5:
+            if count >= self.win_condition:
                 return True
 
         return False
 
     def check_win_condition(self):
-        for x in range(15):
-            for y in range(15):
+        for x in range(self.board_size):
+            for y in range(self.board_size):
                 if self.board[x, y] != 0 and self.check_win(x, y):
                     return True
         return False
@@ -207,8 +230,8 @@ class GomokuGame:
             (10, '__OO_'),  # 玩家活二
         ]
 
-        for x in range(15):
-            for y in range(15):
+        for x in range(self.board_size):
+            for y in range(self.board_size):
                 if self.board[x, y] == 0 and self.is_nearby(x, y):
                     for player in [-1, 1]:  # -1 for AI, 1 for player
                         for dx, dy in [(1, 0), (0, 1), (1, 1), (1, -1)]:
@@ -226,7 +249,7 @@ class GomokuGame:
         line = ''
         for step in range(-4, 5):
             nx, ny = x + step * dx, y + step * dy
-            if 0 <= nx < 15 and 0 <= ny < 15:
+            if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
                 if self.board[nx, ny] == -1:
                     line += 'X'
                 elif self.board[nx, ny] == 1:

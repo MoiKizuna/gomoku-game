@@ -1,0 +1,11 @@
+# 配置文件
+
+# AI参数
+ai:
+  think_time: 2 # AI思考时间（秒）
+  max_depth: 8 # 最大搜索深度
+
+# 游戏参数
+game:
+  board_size: 15 # 棋盘大小
+  win_condition: 5 # 赢棋条件
