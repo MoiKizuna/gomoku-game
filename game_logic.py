@@ -20,7 +20,7 @@ class GomokuGame:
         best_score = float('-inf')
         best_move = None
         start_time = time.time()
-        time_limit = 2  # 设置时间限制为2秒
+        time_limit = 1
 
         depth = 1
         while time.time() - start_time < time_limit:
@@ -59,9 +59,15 @@ class GomokuGame:
             self.cache[board_hash] = score
             return score
 
+        moves = self.generate_moves()
+
+        # 启发式排序：优先考虑评分更高的移动
+        moves.sort(key=lambda move: self.heuristic_move_score(
+            move), reverse=True)
+
         if maximizing_player:
             max_eval = float('-inf')
-            for move in self.generate_moves():
+            for move in moves:
                 x, y = move
                 self.board[x, y] = -1
                 eval = self.alpha_beta(
@@ -75,7 +81,7 @@ class GomokuGame:
             return max_eval
         else:
             min_eval = float('inf')
-            for move in self.generate_moves():
+            for move in moves:
                 x, y = move
                 self.board[x, y] = 1
                 eval = self.alpha_beta(depth + 1, alpha, beta, True, max_depth)
@@ -87,17 +93,58 @@ class GomokuGame:
             self.cache[board_hash] = min_eval
             return min_eval
 
-    def generate_moves(self):
-        # 生成可能的移动，优先考虑靠近已有棋子的空位
-        moves = []
+    def heuristic_move_score(self, move):
+        x, y = move
+        # 简单的启发式评分：离中心越近评分越高
+        return -(abs(x - 7) + abs(y - 7))
+
+    def generate_moves(self, max_moves=15):
+        # 定义优先级列表
+        high_priority_moves = set()
+        medium_priority_moves = set()
+        low_priority_moves = set()
+
+        # 遍历棋盘，分类移动
         for x in range(15):
             for y in range(15):
-                if self.board[x, y] == 0 and self.is_nearby(x, y):
-                    moves.append((x, y))
+                if self.board[x, y] != 0:
+                    # 查找当前棋子的周围空位
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            nx, ny = x + dx, y + dy
+                            if 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx, ny] == 0:
+                                high_priority_moves.add((nx, ny))
 
-        # 对可能的移动进行排序，优先考虑中心位置
-        moves.sort(key=lambda move: (abs(move[0] - 7), abs(move[1] - 7)))
-        return moves
+        # 查找之前的关键位置（例如，玩家或AI有潜在胜利的地方）
+        for x in range(15):
+            for y in range(15):
+                if self.board[x, y] == 0 and self.is_important_position(x, y):
+                    medium_priority_moves.add((x, y))
+
+        # 生成其他低优先级的移动
+        for x in range(15):
+            for y in range(15):
+                if self.board[x, y] == 0 and (x, y) not in high_priority_moves and (x, y) not in medium_priority_moves:
+                    low_priority_moves.add((x, y))
+
+        # 将移动按优先级排序
+        sorted_moves = list(high_priority_moves) + \
+            list(medium_priority_moves) + list(low_priority_moves)
+
+        # 返回前 max_moves 个移动
+        return sorted_moves[:max_moves]
+
+    def is_important_position(self, x, y):
+        # 判断当前位置是否为重要位置，例如可能导致胜利的地方
+        # 可以根据具体需求进一步定义
+        # 这里简单示例：检查该位置是否能够形成四连
+        for player in [1, -1]:
+            self.board[x, y] = player
+            if self.check_win(x, y):
+                self.board[x, y] = 0
+                return True
+            self.board[x, y] = 0
+        return False
 
     def is_nearby(self, x, y):
         # 检查(x, y)附近是否有棋子
@@ -158,7 +205,6 @@ class GomokuGame:
             (300, '__XXX_'),  # AI活三
             (300, '__OOO_'),  # 玩家活三
             (50, 'XX_X_'),  # AI跳三
-            (50, 'OO_O_'),  # 玩家跳三
             (10, '_XX__'),  # AI活二
             (10, '_OO__'),  # 玩家活二
             (10, '__XX_'),  # AI活二
