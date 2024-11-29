@@ -121,7 +121,7 @@
     <script>
         const boardElement = document.getElementById('board');
         const statusElement = document.getElementById('status');
-        const boardSize = 9;
+        const boardSize = {{ board_size }};
         let board = Array.from({ length: boardSize }, () => Array(boardSize).fill(''));
         let gameStarted = false;
         let gameOver = false;
