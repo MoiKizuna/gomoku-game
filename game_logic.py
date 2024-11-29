@@ -13,7 +13,6 @@ class GomokuGame:
 
         self.board_size = config['game']['board_size']
         self.win_condition = config['game']['win_condition']
-        self.think_time = config['ai']['think_time']
         self.max_depth = config['ai']['max_depth']
         self.max_moves = config['ai'].get('max_moves', 20)
 
@@ -40,21 +39,27 @@ class GomokuGame:
     async def ai_move(self):
         best_score = float('-inf')
         best_move = None
-        start_time = time.time()
-        time_limit = self.think_time
         total_nodes_evaluated = 0
 
         depth = 0
-        while time.time() - start_time < time_limit:
-            score, move, nodes_evaluated = await asyncio.to_thread(self.iterative_deepening, depth)
-            total_nodes_evaluated += nodes_evaluated
-            logging.debug(
-                f"深度: {depth}, 节点数: {nodes_evaluated}, 当前最佳分数: {score}")
-            if score > best_score:
-                best_score = score
-                best_move = move
+        while True:
+            logging.debug(f"开始搜索深度: {depth}")
+
+            try:
+                score, move, nodes_evaluated = await asyncio.to_thread(self.iterative_deepening, depth)
+                total_nodes_evaluated += nodes_evaluated
+                logging.debug(
+                    f"深度: {depth}, 节点数: {nodes_evaluated}, 当前最佳分数: {score}")
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+            except Exception as e:
+                logging.error(f"在深度 {depth} 时发生错误: {e}")
+                break
+
             depth += 1
             if depth >= self.max_depth:
+                logging.debug("达到最大深度，停止搜索")
                 break
 
         if best_move:
@@ -63,35 +68,38 @@ class GomokuGame:
         logging.debug(f"总节点数: {total_nodes_evaluated}")
         return best_move
 
-    def iterative_deepening(self, max_depth):
+    def iterative_deepening(self, depth):
         best_score = float('-inf')
         best_move = None
-        nodes_evaluated = 0
-        for move in self.generate_moves():
-            x, y = move
-            self.board[x, y] = -1
-            score, nodes = self.alpha_beta(
-                1, float('-inf'), float('inf'), False, max_depth)
-            nodes_evaluated += nodes
-            self.board[x, y] = 0
-            if score > best_score:
-                best_score = score
-                best_move = move
-        return best_score, best_move, nodes_evaluated
+        total_nodes_evaluated = 0
+        logging.debug(f"开始搜索深度: {depth}")
 
-    def alpha_beta(self, depth, alpha, beta, maximizing_player, max_depth):
+        # 假设 alpha_beta 返回 (score, move, nodes)
+        score, move, nodes = self.alpha_beta(
+            0, float('-inf'), float('inf'), True)
+        total_nodes_evaluated += nodes
+        if score > best_score:
+            best_score = score
+            best_move = move  # 从 alpha_beta 返回的最佳移动
+        logging.debug(f"深度 {depth} 完成, 分数: {score}, 节点数: {nodes}")
+        logging.debug(
+            f"最佳移动: {best_move}, 分数: {best_score}, 总节点数: {total_nodes_evaluated}")
+        return best_score, best_move, total_nodes_evaluated
+
+    def alpha_beta(self, depth, alpha, beta, maximizing_player):
+        best_move = None
         board_hash = self.hash_board()
         cache_key = f"{board_hash}|depth:{depth}|player:{maximizing_player}"
         if cache_key in self.cache:
             logging.debug(
                 f"缓存命中: key={cache_key}, score={self.cache[cache_key]}")
-            return self.cache[cache_key], 0
+            return self.cache[cache_key], best_move, 0
 
-        if self.check_win_condition() or depth == max_depth:
+        if self.check_win_condition() or depth == self.max_depth:
             score = self.evaluate_board()
             self.cache[cache_key] = score
             logging.debug(f"评估棋局: depth={depth}, score={score}")
-            return score, 1
+            return score, best_move, 1
 
         moves = self.generate_moves()
         logging.debug(f"生成移动: depth={depth}, moves={moves}")
@@ -101,44 +109,28 @@ class GomokuGame:
         moves.sort(key=lambda move: self.heuristic_move_score(
             move), reverse=True)
 
-        if maximizing_player:
-            max_eval = float('-inf')
-            for move in moves:
-                x, y = move
-                self.board[x, y] = -1
-                eval, nodes = self.alpha_beta(
-                    depth + 1, alpha, beta, False, max_depth)
-                nodes_evaluated += nodes
-                self.board[x, y] = 0
-                max_eval = max(max_eval, eval)
-                alpha = max(alpha, eval)
-                logging.debug(
-                    f"Maximizing Player: depth={depth}, move={move}, eval={eval}, alpha={alpha}, beta={beta}")
-                if beta <= alpha:
-                    logging.debug(
-                        f"剪枝发生在 maximizing_player, depth {depth}, alpha: {alpha}, beta: {beta}")
+        for move in moves:
+            # 执行移动
+            self.board[move[0], move[1]] = -1 if maximizing_player else 1
+            score, _, nodes = self.alpha_beta(
+                depth + 1, alpha, beta, not maximizing_player)
+            # 撤销移动
+            self.board[move[0], move[1]] = 0
+
+            if maximizing_player:
+                if score > alpha:
+                    alpha = score
+                    best_move = move
+                if alpha >= beta:
                     break
-            self.cache[cache_key] = max_eval
-            return max_eval, nodes_evaluated
-        else:
-            min_eval = float('inf')
-            for move in moves:
-                x, y = move
-                self.board[x, y] = 1
-                eval, nodes = self.alpha_beta(
-                    depth + 1, alpha, beta, True, max_depth)
-                nodes_evaluated += nodes
-                self.board[x, y] = 0
-                min_eval = min(min_eval, eval)
-                beta = min(beta, eval)
-                logging.debug(
-                    f"Minimizing Player: depth={depth}, move={move}, eval={eval}, alpha={alpha}, beta={beta}")
+            else:
+                if score < beta:
+                    beta = score
+                    best_move = move
                 if beta <= alpha:
-                    logging.debug(
-                        f"剪枝发生在 minimizing_player, depth {depth}, alpha: {alpha}, beta: {beta}")
                     break
-            self.cache[cache_key] = min_eval
-            return min_eval, nodes_evaluated
+
+        return (alpha if maximizing_player else beta), best_move, len(moves)
 
     def heuristic_move_score(self, move):
         x, y = move
@@ -156,14 +148,18 @@ class GomokuGame:
         high_priority_moves = set()
         medium_priority_moves = set()
         low_priority_moves = set()
-        for x in range(self.board_size):
-            for y in range(self.board_size):
-                if self.board[x, y] != 0:
-                    for dx in range(-1, 2):
-                        for dy in range(-1, 2):
-                            nx, ny = x + dx, y + dy
-                            if 0 <= nx < self.board_size and 0 <= ny < self.board_size and self.board[nx, ny] == 0:
-                                high_priority_moves.add((nx, ny))
+
+        # 获取玩家最后落子的坐标
+        last_player_move = self.get_last_player_move()
+
+        # 高优先级：玩家最后落子周围
+        if last_player_move:
+            x, y = last_player_move
+            for dx in range(-1, 2):
+                for dy in range(-1, 2):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < self.board_size and 0 <= ny < self.board_size and self.board[nx, ny] == 0:
+                        high_priority_moves.add((nx, ny))
 
         # 中优先级：重要位置
         for x in range(self.board_size):
@@ -183,6 +179,14 @@ class GomokuGame:
 
         # 返回前 max_moves 个移动
         return sorted_moves[:self.max_moves]
+
+    def get_last_player_move(self):
+        # 遍历棋盘，找到最后一个玩家的落子
+        for x in range(self.board_size):
+            for y in range(self.board_size):
+                if self.board[x, y] == 1:
+                    return x, y
+        return None
 
     def is_important_position(self, x, y):
         # 判断当前位置是否为重要位置，例如可能导致胜利的地方
@@ -238,25 +242,28 @@ class GomokuGame:
     def evaluate_board(self):
         score = 0
         patterns = [
-            (10000, 'OOOOO'),  # AI五连
-            (10000, 'XXXXX'),  # 玩家五连
-            (5000, '_OOOO_'),  # AI活四
-            (5000, '_XXXX_'),  # 玩家活四
-            (2000, 'OOOO_'),  # AI冲四
-            (2000, 'XXXX_'),  # 玩家冲四
-            (2000, '_OOOO'),  # AI冲四
-            (2000, '_XXXX'),  # 玩家冲四
-            (1000, 'OOO_O'),  # AI跳四
-            (1000, 'XXX_X'),  # 玩家跳四
-            (500, '_OOO__'),  # AI活三
-            (500, '_XXX__'),  # 玩家活三
-            (500, '__OOO_'),  # AI活三
-            (500, '__XXX_'),  # 玩家活三
-            (100, 'OO_X_'),  # AI跳三
-            (50, '_OO__'),  # AI活二
-            (50, '_XX__'),  # 玩家活二
-            (50, '__OO_'),  # AI活二
-            (50, '__XX_'),  # 玩家活二
+            (100000000, 'OOOOO'),  # AI五连
+            (100000, 'XXXXX'),  # 玩家五连
+            (50000, '_OOOO_'),  # AI活四
+            (100000, '_XXXX_'),  # 玩家活四
+            (10000, 'OOOO_'),  # AI冲四
+            (20000, 'XXXX_'),  # 玩家冲四
+            (10000, '_OOOO'),  # AI冲四
+            (20000, '_XXXX'),  # 玩家冲四
+            (8000, 'OOO_O'),  # AI跳四
+            (16000, 'XXX_X'),  # 玩家跳四
+            (3000, '_OOO__'),  # AI活三
+            (6000, '_XXX__'),  # 玩家活三
+            (3000, '__OOO_'),  # AI活三
+            (6000, '__XXX_'),  # 玩家活三
+            (1500, 'OO_X_'),  # AI跳三
+            (3000, 'XX_O_'),  # 玩家跳三
+            (200, '_OO__'),  # AI活二
+            (400, '_XX__'),  # 玩家活二
+            (200, '__OO_'),  # AI活二
+            (400, '__XX_'),  # 玩家活二
+            (100, 'O__O'),  # AI眠二
+            (200, 'X__X'),  # 玩家眠二
         ]
 
         for x in range(self.board_size):
@@ -270,7 +277,7 @@ class GomokuGame:
                                     if player == -1:
                                         score += value
                                     else:
-                                        score -= value * 1.5
+                                        score -= value * 2  # 进一步增加防守优先级
 
         return score
 

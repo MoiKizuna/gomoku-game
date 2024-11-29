@@ -2,9 +2,8 @@
 
 # AI参数
 ai:
-  think_time: 5 # AI思考时间（秒）
-  max_depth: 12 # 最大搜索深度
-  max_moves: 100 # 最大生成移动数
+  max_depth: 2 # 最大搜索深度
+  max_moves: 15 # 最大生成移动数
 
 # 游戏参数
 game:

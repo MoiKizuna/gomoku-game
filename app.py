@@ -9,7 +9,7 @@ app = Flask(__name__)
 def validate_config(config):
     """验证配置文件的有效性"""
     required_fields = {
-        'ai': ['think_time', 'max_depth'],
+        'ai': ['max_depth'],
         'game': ['board_size', 'win_condition']
     }
 
