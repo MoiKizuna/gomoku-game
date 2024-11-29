@@ -15,6 +15,7 @@ class GomokuGame:
         self.win_condition = config['game']['win_condition']
         self.think_time = config['ai']['think_time']
         self.max_depth = config['ai']['max_depth']
+        self.max_moves = config['ai'].get('max_moves', 20)
 
         self.board = np.zeros((self.board_size, self.board_size), dtype=int)
         self.current_player = 1  # 1 for player, -1 for AI
@@ -41,10 +42,14 @@ class GomokuGame:
         best_move = None
         start_time = time.time()
         time_limit = self.think_time
+        total_nodes_evaluated = 0
 
         depth = 0
         while time.time() - start_time < time_limit:
-            score, move = await asyncio.to_thread(self.iterative_deepening, depth)
+            score, move, nodes_evaluated = await asyncio.to_thread(self.iterative_deepening, depth)
+            total_nodes_evaluated += nodes_evaluated
+            logging.debug(
+                f"深度: {depth}, 节点数: {nodes_evaluated}, 当前最佳分数: {score}")
             if score > best_score:
                 best_score = score
                 best_move = move
@@ -55,33 +60,37 @@ class GomokuGame:
         if best_move:
             print(f"AI chooses move at {best_move} with score {best_score}")
             self.board[best_move[0], best_move[1]] = -1
+        logging.debug(f"总节点数: {total_nodes_evaluated}")
         return best_move
 
     def iterative_deepening(self, max_depth):
         best_score = float('-inf')
         best_move = None
+        nodes_evaluated = 0
         for move in self.generate_moves():
             x, y = move
             self.board[x, y] = -1
-            score = self.alpha_beta(
+            score, nodes = self.alpha_beta(
                 0, float('-inf'), float('inf'), False, max_depth)
+            nodes_evaluated += nodes
             self.board[x, y] = 0
             if score > best_score:
                 best_score = score
                 best_move = move
-        return best_score, best_move
+        return best_score, best_move, nodes_evaluated
 
     def alpha_beta(self, depth, alpha, beta, maximizing_player, max_depth):
         board_hash = self.hash_board()
         if board_hash in self.cache:
-            return self.cache[board_hash]
+            return self.cache[board_hash], 0
 
         if self.check_win_condition() or depth == max_depth:
             score = self.evaluate_board()
             self.cache[board_hash] = score
-            return score
+            return score, 1
 
         moves = self.generate_moves()
+        nodes_evaluated = 0
 
         # 启发式排序：优先考虑评分更高的移动
         moves.sort(key=lambda move: self.heuristic_move_score(
@@ -92,41 +101,52 @@ class GomokuGame:
             for move in moves:
                 x, y = move
                 self.board[x, y] = -1
-                eval = self.alpha_beta(
+                eval, nodes = self.alpha_beta(
                     depth + 1, alpha, beta, False, max_depth)
+                nodes_evaluated += nodes
                 self.board[x, y] = 0
                 max_eval = max(max_eval, eval)
                 alpha = max(alpha, eval)
                 if beta <= alpha:
+                    logging.debug(
+                        f"剪枝发生在深度 {depth}，alpha: {alpha}, beta: {beta}")
                     break
             self.cache[board_hash] = max_eval
-            return max_eval
+            return max_eval, nodes_evaluated
         else:
             min_eval = float('inf')
             for move in moves:
                 x, y = move
                 self.board[x, y] = 1
-                eval = self.alpha_beta(depth + 1, alpha, beta, True, max_depth)
+                eval, nodes = self.alpha_beta(
+                    depth + 1, alpha, beta, True, max_depth)
+                nodes_evaluated += nodes
                 self.board[x, y] = 0
                 min_eval = min(min_eval, eval)
                 beta = min(beta, eval)
                 if beta <= alpha:
+                    logging.debug(
+                        f"剪枝发生在深度 {depth}，alpha: {alpha}, beta: {beta}")
                     break
             self.cache[board_hash] = min_eval
-            return min_eval
+            return min_eval, nodes_evaluated
 
     def heuristic_move_score(self, move):
         x, y = move
         # 简单的启发式评分：离中心越近评分越高
         center = self.board_size // 2
-        return -(abs(x - center) + abs(y - center))
+        score = -(abs(x - center) + abs(y - center)) * 2
 
-    def generate_moves(self, max_moves=15):
+        # 可以加入更多启发式策略，例如考虑周围棋子的数量
+        if self.is_nearby(x, y):
+            score += 10  # 增加权重
+
+        return score
+
+    def generate_moves(self):
         high_priority_moves = set()
         medium_priority_moves = set()
         low_priority_moves = set()
-
-        # 高优先级：位于现有棋子周围的空位
         for x in range(self.board_size):
             for y in range(self.board_size):
                 if self.board[x, y] != 0:
@@ -153,7 +173,7 @@ class GomokuGame:
             list(medium_priority_moves) + list(low_priority_moves)
 
         # 返回前 max_moves 个移动
-        return sorted_moves[:max_moves]
+        return sorted_moves[:self.max_moves]
 
     def is_important_position(self, x, y):
         # 判断当前位置是否为重要位置，例如可能导致胜利的地方
@@ -209,25 +229,25 @@ class GomokuGame:
     def evaluate_board(self):
         score = 0
         patterns = [
-            (10000, 'XXXXX'),  # AI五连
-            (10000, 'OOOOO'),  # 玩家五连
-            (5000, '_XXXX_'),  # AI活四
-            (5000, '_OOOO_'),  # 玩家活四
-            (1000, 'XXXX_'),  # AI冲四
-            (1000, 'OOOO_'),  # 玩家冲四
-            (1000, '_XXXX'),  # AI冲四
-            (1000, '_OOOO'),  # 玩家冲四
-            (500, 'XXX_X'),  # AI跳四
-            (500, 'OOO_O'),  # 玩家跳四
-            (300, '_XXX__'),  # AI活三
-            (300, '_OOO__'),  # 玩家活三
-            (300, '__XXX_'),  # AI活三
-            (300, '__OOO_'),  # 玩家活三
-            (50, 'XX_X_'),  # AI跳三
-            (10, '_XX__'),  # AI活二
-            (10, '_OO__'),  # 玩家活二
-            (10, '__XX_'),  # AI活二
-            (10, '__OO_'),  # 玩家活二
+            (10000, 'OOOOO'),  # AI五连
+            (10000, 'XXXXX'),  # 玩家五连
+            (5000, '_OOOO_'),  # AI活四
+            (5000, '_XXXX_'),  # 玩家活四
+            (2000, 'OOOO_'),  # AI冲四
+            (2000, 'XXXX_'),  # 玩家冲四
+            (2000, '_OOOO'),  # AI冲四
+            (2000, '_XXXX'),  # 玩家冲四
+            (1000, 'OOO_O'),  # AI跳四
+            (1000, 'XXX_X'),  # 玩家跳四
+            (500, '_OOO__'),  # AI活三
+            (500, '_XXX__'),  # 玩家活三
+            (500, '__OOO_'),  # AI活三
+            (500, '__XXX_'),  # 玩家活三
+            (100, 'OO_X_'),  # AI跳三
+            (50, '_OO__'),  # AI活二
+            (50, '_XX__'),  # 玩家活二
+            (50, '__OO_'),  # AI活二
+            (50, '__XX_'),  # 玩家活二
         ]
 
         for x in range(self.board_size):
