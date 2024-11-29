@@ -19,6 +19,7 @@ class GomokuGame:
         self.board = np.zeros((self.board_size, self.board_size), dtype=int)
         self.current_player = 1  # 1 for player, -1 for AI
         self.cache = {}  # 用于存储评估结果的缓存
+        self.last_player_move = None  # 用于记录最后一个玩家的落子位置
 
         logging.basicConfig(level=logging.DEBUG)
 
@@ -30,6 +31,7 @@ class GomokuGame:
 
         if self.board[x, y] == 0:
             self.board[x, y] = 1
+            self.last_player_move = (x, y)  # 更新最后一个玩家的落子位置
             win = self.check_win(x, y)
             logging.debug(f"移动后检查胜利: {win}")
             return win
@@ -181,12 +183,8 @@ class GomokuGame:
         return sorted_moves[:self.max_moves]
 
     def get_last_player_move(self):
-        # 遍历棋盘，找到最后一个玩家的落子
-        for x in range(self.board_size):
-            for y in range(self.board_size):
-                if self.board[x, y] == 1:
-                    return x, y
-        return None
+        # 返回记录的最后一个玩家的落子位置
+        return self.last_player_move
 
     def is_important_position(self, x, y):
         # 判断当前位置是否为重要位置，例如可能导致胜利的地方
