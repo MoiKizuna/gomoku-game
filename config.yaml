@@ -3,7 +3,7 @@
 # AI参数
 ai:
   max_depth: 2 # 最大搜索深度
-  max_moves: 15 # 最大生成移动数
+  max_moves: 100 # 最大生成移动数
 
 # 游戏参数
 game:
