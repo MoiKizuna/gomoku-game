@@ -178,6 +178,14 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'win') {
+                        if (data.ai_move) {
+                            const aiMove = data.ai_move;
+                            board[aiMove.x][aiMove.y] = 'O';
+                            const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
+                            const aiPiece = document.createElement('div');
+                            aiPiece.className = 'piece white';
+                            aiCell.appendChild(aiPiece);
+                        }
                         statusElement.textContent = `游戏结束，${data.winner}获胜！`;
                         gameOver = true;
                     } else if (data.status === 'continue') {
@@ -223,7 +231,18 @@
                             })
                                 .then(response => response.json())
                                 .then(data => {
-                                    if (data.status === 'continue') {
+                                    if (data.status === 'win') {
+                                        if (data.ai_move) {
+                                            const aiMove = data.ai_move;
+                                            board[aiMove.x][aiMove.y] = 'O';
+                                            const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
+                                            const aiPiece = document.createElement('div');
+                                            aiPiece.className = 'piece white';
+                                            aiCell.appendChild(aiPiece);
+                                        }
+                                        statusElement.textContent = `游戏结束，${data.winner}获胜！`;
+                                        gameOver = true;
+                                    } else if (data.status === 'continue') {
                                         const aiMove = data.ai_move;
                                         board[aiMove.x][aiMove.y] = 'O';
                                         const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
@@ -231,9 +250,6 @@
                                         aiPiece.className = 'piece white';
                                         aiCell.appendChild(aiPiece);
                                         statusElement.textContent = 'AI 已移动';
-                                    } else if (data.status === 'win') {
-                                        statusElement.textContent = `游戏结束，${data.winner}获胜！`;
-                                        gameOver = true;
                                     } else if (data.status === 'error') {
                                         statusElement.textContent = `错误: ${data.message}`;
                                     }

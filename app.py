@@ -57,6 +57,8 @@ def move():
     if x == -1 and y == -1:
         ai_move = asyncio.run(game.ai_move())
         if ai_move:
+            if game.check_win_condition():
+                return jsonify({'status': 'win', 'winner': 'AI', 'ai_move': {'x': ai_move[0], 'y': ai_move[1]}})
             return jsonify({'status': 'continue', 'ai_move': {'x': ai_move[0], 'y': ai_move[1]}})
         else:
             return jsonify({'status': 'error', 'message': 'AI 无法移动'}), 400
@@ -69,7 +71,7 @@ def move():
         ai_move = asyncio.run(game.ai_move())
         if ai_move:
             if game.check_win_condition():
-                return jsonify({'status': 'win', 'winner': 'AI'})
+                return jsonify({'status': 'win', 'winner': 'AI', 'ai_move': {'x': ai_move[0], 'y': ai_move[1]}})
             return jsonify({'status': 'continue', 'ai_move': {'x': ai_move[0], 'y': ai_move[1]}})
         else:
             return jsonify({'status': 'error', 'message': 'AI 无法移动'}), 400
