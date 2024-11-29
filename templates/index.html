@@ -36,6 +36,7 @@
 
     <button onclick="startGame('player')">玩家先手</button>
     <button onclick="startGame('ai')">AI先手</button>
+    <button onclick="resetGame()">重置游戏</button>
 
     <script>
         const boardElement = document.getElementById('board');
@@ -83,11 +84,13 @@
                     if (data.status === 'win') {
                         statusElement.textContent = `游戏结束，${data.winner}获胜！`;
                         gameOver = true;
-                    } else {
+                    } else if (data.status === 'continue') {
                         const aiMove = data.ai_move;
                         board[aiMove.x][aiMove.y] = 'O';
                         const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
                         aiCell.textContent = 'O';
+                    } else if (data.status === 'error') {
+                        statusElement.textContent = `错误: ${data.message}`;
                     }
                     aiTurn = false;
                 })
@@ -98,30 +101,68 @@
         }
 
         function startGame(firstPlayer) {
-            gameStarted = true;
-            gameOver = false;
-            board = Array.from({ length: boardSize }, () => Array(boardSize).fill(''));
-            createBoard();
-            statusElement.textContent = '游戏正在进行中...';
+            fetch('/reset', {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'reset') {
+                        board = Array.from({ length: boardSize }, () => Array(boardSize).fill(''));
+                        createBoard();
+                        gameStarted = true;
+                        gameOver = false;
+                        statusElement.textContent = '游戏正在进行中...';
 
-            if (firstPlayer === 'ai') {
-                // AI先手
-                fetch('/move', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ x: -1, y: -1 }) // 特殊标���，表示AI先手
+                        if (firstPlayer === 'ai') {
+                            aiTurn = true;
+                            fetch('/move', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ x: -1, y: -1 }) // 特殊标记，表示AI先手
+                            })
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.status === 'continue') {
+                                        const aiMove = data.ai_move;
+                                        board[aiMove.x][aiMove.y] = 'O';
+                                        const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
+                                        aiCell.textContent = 'O';
+                                    } else if (data.status === 'win') {
+                                        statusElement.textContent = `游戏结束，${data.winner}获胜！`;
+                                        gameOver = true;
+                                    } else if (data.status === 'error') {
+                                        statusElement.textContent = `错误: ${data.message}`;
+                                    }
+                                    aiTurn = false;
+                                })
+                                .catch(error => {
+                                    console.error('Error:', error);
+                                    aiTurn = false;
+                                });
+                        }
+                    }
                 })
-                    .then(response => response.json())
-                    .then(data => {
-                        const aiMove = data.ai_move;
-                        board[aiMove.x][aiMove.y] = 'O';
-                        const aiCell = document.querySelector(`.cell[data-x='${aiMove.x}'][data-y='${aiMove.y}']`);
-                        aiCell.textContent = 'O';
-                    })
-                    .catch(error => console.error('Error:', error));
-            }
+                .catch(error => console.error('Error:', error));
+        }
+
+        function resetGame() {
+            fetch('/reset', {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'reset') {
+                        board = Array.from({ length: boardSize }, () => Array(boardSize).fill(''));
+                        createBoard();
+                        gameStarted = false;
+                        gameOver = false;
+                        aiTurn = false;
+                        statusElement.textContent = '游戏已重置。请选择模式开始游戏。';
+                    }
+                })
+                .catch(error => console.error('Error:', error));
         }
 
         createBoard();

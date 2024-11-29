@@ -22,7 +22,7 @@ class GomokuGame:
         start_time = time.time()
         time_limit = 1
 
-        depth = 1
+        depth = 0
         while time.time() - start_time < time_limit:
             score, move = await asyncio.to_thread(self.iterative_deepening, depth)
             if score > best_score:
@@ -99,35 +99,33 @@ class GomokuGame:
         return -(abs(x - 7) + abs(y - 7))
 
     def generate_moves(self, max_moves=15):
-        # 定义优先级列表
         high_priority_moves = set()
         medium_priority_moves = set()
         low_priority_moves = set()
 
-        # 遍历棋盘，分类移动
+        # 高优先级：位于现有棋子周围的空位
         for x in range(15):
             for y in range(15):
                 if self.board[x, y] != 0:
-                    # 查找当前棋子的周围空位
                     for dx in range(-1, 2):
                         for dy in range(-1, 2):
                             nx, ny = x + dx, y + dy
                             if 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx, ny] == 0:
                                 high_priority_moves.add((nx, ny))
 
-        # 查找之前的关键位置（例如，玩家或AI有潜在胜利的地方）
+        # 中优先级：重要位置
         for x in range(15):
             for y in range(15):
                 if self.board[x, y] == 0 and self.is_important_position(x, y):
                     medium_priority_moves.add((x, y))
 
-        # 生成其他低优先级的移动
+        # 低优先级：其他空位
         for x in range(15):
             for y in range(15):
                 if self.board[x, y] == 0 and (x, y) not in high_priority_moves and (x, y) not in medium_priority_moves:
                     low_priority_moves.add((x, y))
 
-        # 将移动按优先级排序
+        # 按优先级排序
         sorted_moves = list(high_priority_moves) + \
             list(medium_priority_moves) + list(low_priority_moves)
 
@@ -136,8 +134,6 @@ class GomokuGame:
 
     def is_important_position(self, x, y):
         # 判断当前位置是否为重要位置，例如可能导致胜利的地方
-        # 可以根据具体需求进一步定义
-        # 这里简单示例：检查该位置是否能够形成四连
         for player in [1, -1]:
             self.board[x, y] = player
             if self.check_win(x, y):
@@ -217,20 +213,13 @@ class GomokuGame:
                     for player in [-1, 1]:  # -1 for AI, 1 for player
                         for dx, dy in [(1, 0), (0, 1), (1, 1), (1, -1)]:
                             line = self.get_line(x, y, dx, dy)
-                            print(
-                                f"Checking line at ({x}, {y}) for player {player}: {line}")
                             for value, pattern in patterns:
                                 if pattern in line:
                                     if player == -1:
                                         score += value
-                                        print(
-                                            f"AI pattern matched: {pattern} with score {value}")
                                     else:
                                         score -= value * 1.5
-                                        print(
-                                            f"Player pattern matched: {pattern} with score {value * 1.5}")
 
-        print(f"Total score: {score}")
         return score
 
     def get_line(self, x, y, dx, dy):
@@ -246,7 +235,6 @@ class GomokuGame:
                     line += '_'
             else:
                 line += '_'
-        print(f"Line at ({x}, {y}) in direction ({dx}, {dy}): {line}")
         return line
 
     def hash_board(self):
